@@ -12,17 +12,20 @@
 #include "index.h"
 #include "reset.h"
 
-// const char* networkName = "Automathaus";
-// const char* password = "AutomatPass2023";
-Preferences preferences;
 
+// =================================> Variables and objects declarations <================================
+Preferences preferences;
+WebServer server(80);
+
+
+bool resetMode = false;
 const char* ssid_ap = "AutomathausNodeTest";
 const char* password_ap = "0123456789";
 
-bool resetMode = false;
+const int firmwareVersion = 1;
 
-WebServer server(80);
 
+// =================================> Setup() <================================
 void setup() {
     Serial.begin(115200);
     preferences.begin("credentials", false);
@@ -85,7 +88,7 @@ void loop() {
     delay(2);
 }
 
-
+// Utility function, reboots the Esp32 and outputs the reason to the serial port.
 static void rebootEspWithReason(String reason) {
     Serial.println(reason);
     delay(1000);
@@ -197,7 +200,7 @@ void handlePost() {
         delay(3000);
 
         // Restart ESP
-        ESP.restart();
+        rebootEspWithReason("Rebooting to apply the configuration settings...");
     } else {
         server.send(400, "text/plain", "Bad Request");
     }
@@ -213,6 +216,41 @@ void handleNotFound() { server.send(404, "text/plain", "Not found 404"); }
 
 
 // =================================> OTA Updates <================================
+
+void OTA_UpdateRoutine(){
+	
+}
+
+// bool checkFirmware() {
+//     HTTPClient http;
+//     http.begin(baseUrl + checkFile);
+//     int httpCode = http.GET();
+//     bool stat = false;
+//     String payload = http.getString();
+//     Serial.println(payload);
+//     StaticJsonDocument<100> json;
+//     deserializeJson(json, payload);
+
+//     if (httpCode == HTTP_CODE_OK) {
+//         fwVersion = json["versionCode"].as<int>();
+//         fwName = json["fileName"].as<String>();
+//         fwUrl = baseUrl + fwName;
+//         if (fwVersion > currentVersion) {
+//             Serial.println("Firmware update available");
+//             stat = true;
+//         } else {
+//             Serial.println("You have the latest version");
+//         }
+//         Serial.print("Version: ");
+//         Serial.print(fwName);
+//         Serial.print("\tCode: ");
+//         Serial.println(fwVersion);
+//     }
+//     http.end();
+
+//     return stat;
+// }
+
 
 bool downloadFirmware(String firmwareUrl) {
     HTTPClient http;
@@ -242,7 +280,6 @@ bool downloadFirmware(String firmwareUrl) {
 
 
 void performUpdate(Stream &updateSource, size_t updateSize) {
-    String result = "";
     if (Update.begin(updateSize)) {
         size_t written = Update.writeStream(updateSource);
         if (written == updateSize) {
