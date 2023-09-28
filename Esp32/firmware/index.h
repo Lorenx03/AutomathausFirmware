@@ -1,4 +1,4 @@
-const char index_html[] PROGMEM = R"rawliteral(
+const char reset_html[] PROGMEM = R"rawliteral(
 <!DOCTYPE html>
 <html lang="it">
   <head>
