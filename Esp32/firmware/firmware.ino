@@ -13,7 +13,7 @@
 #include "reset.h"
 
 
-// =================================> Variables and objects declarations <================================
+// =================================> Variabless and objects declarations <================================
 Preferences preferences;
 WebServer server(80);
 
