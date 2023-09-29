@@ -25,7 +25,7 @@ const char* password_ap = "0123456789";
 
 const String firmwareFolderUrl = "https://raw.githubusercontent.com/Lorenx03/AutomathausFirmware/main/Esp32/";
 String firmwareFilename = "firmware.bin";
-const int firmwareVersion = 1;
+const int firmwareVersion = 0;
 
 
 // =================================> Setup() <================================
@@ -52,6 +52,7 @@ void setup() {
 
     server.enableCORS();  // CORS
 
+    Serial.println("FIRMWARE VER: " + String(firmwareVersion));
 
 
     // Setting up the handlers
@@ -83,19 +84,23 @@ void setup() {
     Serial.println("HTTP server started");
 }
 
+// Timer variables
 unsigned long previousMillis = 0;
 const long interval = 10000;
+
 // Main loop
 void loop() {
     server.handleClient();
 
-    unsigned long currentMillis = millis();
-    if (currentMillis - previousMillis >= interval) {
-        previousMillis = currentMillis;
-        
-        OTA_UpdateRoutine();
+    if (!resetMode) {
+        unsigned long currentMillis = millis();
+        if (currentMillis - previousMillis >= interval) {
+            previousMillis = currentMillis;
+            
+            OTA_UpdateRoutine();
+        }
     }
-
+    
     delay(2);
 }
 
@@ -230,9 +235,24 @@ void handleNotFound() { server.send(404, "text/plain", "Not found 404"); }
 
 void OTA_UpdateRoutine(){
 	checkForUpdates();
+
+    Serial.println("----> Checking for updates <----");
+        if (checkForUpdates()) {
+            if (SPIFFS.exists("/update.bin")) {
+                SPIFFS.remove("/update.bin");
+                Serial.println("Removed existing update file");
+            }
+            if (downloadFirmware(firmwareFolderUrl + firmwareFilename)) {
+                Serial.println("Download complete");
+                updateFromFS(SPIFFS);
+            } else {
+                Serial.println("Download failed");
+            }
+        }
 }
 
-void checkForUpdates() {
+
+bool checkForUpdates() {
     int jsonFirmwareVer = 0;
     
     HTTPClient http;
@@ -248,19 +268,22 @@ void checkForUpdates() {
     if (httpCode == HTTP_CODE_OK) {
         jsonFirmwareVer = json["versionCode"].as<int>();
         firmwareFilename = json["fileName"].as<String>();
-        
-        if (jsonFirmwareVer > firmwareVersion) {
-            Serial.println("Firmware update available");
-        } else {
-            Serial.println("You have the latest version");
-        }
 
         Serial.print("Version: ");
         Serial.print(firmwareFilename);
         Serial.print("\tCode: ");
         Serial.println(jsonFirmwareVer);
+
+        http.end();
+        
+        if (jsonFirmwareVer > firmwareVersion) {
+            Serial.println("Firmware update available");
+            return true;
+        } else {
+            Serial.println("You have the latest version");
+            return false;
+        }
     }
-    http.end();
 }
 
 
