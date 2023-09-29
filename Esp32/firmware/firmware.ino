@@ -30,6 +30,12 @@ const int firmwareVersion = 0;
 
 // =================================> Setup() <================================
 void setup() {
+    if (SPIFFS.begin()){
+        Serial.println("Reading the filesystem...");
+    }else{
+        Serial.println("Problems reading the filesystem");
+    }
+
     Serial.begin(115200);
     preferences.begin("credentials", false);
 
@@ -291,7 +297,7 @@ bool downloadFirmware(String firmwareUrl) {
     HTTPClient http;
     bool success = false;
 
-    File f = SPIFFS.open("/update.bin", "w");
+    File f = SPIFFS.open("/update.bin", FILE_WRITE);
     if (f) {
         http.begin(firmwareUrl);
         int httpCode = http.GET();
