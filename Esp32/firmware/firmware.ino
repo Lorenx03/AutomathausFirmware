@@ -12,8 +12,9 @@
 #include "index.h"
 #include "reset.h"
 
+#define JSON_NAME "firmwareUpdate.json"
 
-// =================================> Variabless and objects declarations <================================
+// =================================> Variables and objects declarations <================================
 Preferences preferences;
 WebServer server(80);
 
@@ -22,6 +23,8 @@ bool resetMode = false;
 const char* ssid_ap = "AutomathausNodeTest";
 const char* password_ap = "0123456789";
 
+const String firmwareFolderUrl = "https://raw.githubusercontent.com/Lorenx03/AutomathausFirmware/main/Esp32/";
+String firmwareFilename = "firmware.bin";
 const int firmwareVersion = 1;
 
 
@@ -80,11 +83,19 @@ void setup() {
     Serial.println("HTTP server started");
 }
 
-
-
+unsigned long previousMillis = 0;
+const long interval = 10000;
 // Main loop
 void loop() {
     server.handleClient();
+
+    unsigned long currentMillis = millis();
+    if (currentMillis - previousMillis >= interval) {
+        previousMillis = currentMillis;
+        
+        OTA_UpdateRoutine();
+    }
+
     delay(2);
 }
 
@@ -218,38 +229,39 @@ void handleNotFound() { server.send(404, "text/plain", "Not found 404"); }
 // =================================> OTA Updates <================================
 
 void OTA_UpdateRoutine(){
-	
+	checkForUpdates();
 }
 
-// bool checkFirmware() {
-//     HTTPClient http;
-//     http.begin(baseUrl + checkFile);
-//     int httpCode = http.GET();
-//     bool stat = false;
-//     String payload = http.getString();
-//     Serial.println(payload);
-//     StaticJsonDocument<100> json;
-//     deserializeJson(json, payload);
+void checkForUpdates() {
+    int jsonFirmwareVer = 0;
+    
+    HTTPClient http;
+    http.begin(firmwareFolderUrl + JSON_NAME);
+    int httpCode = http.GET();
 
-//     if (httpCode == HTTP_CODE_OK) {
-//         fwVersion = json["versionCode"].as<int>();
-//         fwName = json["fileName"].as<String>();
-//         fwUrl = baseUrl + fwName;
-//         if (fwVersion > currentVersion) {
-//             Serial.println("Firmware update available");
-//             stat = true;
-//         } else {
-//             Serial.println("You have the latest version");
-//         }
-//         Serial.print("Version: ");
-//         Serial.print(fwName);
-//         Serial.print("\tCode: ");
-//         Serial.println(fwVersion);
-//     }
-//     http.end();
+    String payload = http.getString();
+    Serial.println(payload);
 
-//     return stat;
-// }
+    StaticJsonDocument<100> json;
+    deserializeJson(json, payload);
+
+    if (httpCode == HTTP_CODE_OK) {
+        jsonFirmwareVer = json["versionCode"].as<int>();
+        firmwareFilename = json["fileName"].as<String>();
+        
+        if (jsonFirmwareVer > firmwareVersion) {
+            Serial.println("Firmware update available");
+        } else {
+            Serial.println("You have the latest version");
+        }
+
+        Serial.print("Version: ");
+        Serial.print(firmwareFilename);
+        Serial.print("\tCode: ");
+        Serial.println(jsonFirmwareVer);
+    }
+    http.end();
+}
 
 
 bool downloadFirmware(String firmwareUrl) {
