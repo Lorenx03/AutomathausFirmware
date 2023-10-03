@@ -259,6 +259,7 @@ void OTA_UpdateRoutine(){
 
 
 bool checkForUpdates() {
+    bool out = false;
     int jsonFirmwareVer = 0;
     
     HTTPClient http;
@@ -284,12 +285,14 @@ bool checkForUpdates() {
         
         if (jsonFirmwareVer > firmwareVersion) {
             Serial.println("Firmware update available");
-            return true;
+            out = true;
         } else {
             Serial.println("You have the latest version");
-            return false;
+            out = false;
         }
     }
+
+    return out;
 }
 
 
