@@ -1,14 +1,9 @@
+#include <WiFiClient.h>
+#include <WiFi.h>
 #include <ArduinoJson.h>
 #include <ESPmDNS.h>
-#include <HTTPClient.h>
-#include <Preferences.h>
-#include <Update.h>
-#include <WebServer.h>
-#include <WiFiClient.h>
-
 #include "FS.h"
-#include "SPIFFS.h"
-#include "WiFi.h"
+
 #include "index.h"
 #include "reset.h"
 
@@ -17,11 +12,20 @@
 // Check if the code is being compiled for ESP32
 #ifdef ESP32
     #define BOARD_NAME "ESP32" // Define a board name
+    #include <HTTPClient.h>
+    #include <WebServer.h>
+    #include <Preferences.h>
+    #include <Update.h>
+    #include "SPIFFS.h"
 #endif
 
 // Check if the code is being compiled for ESP8266
 #ifdef ESP8266
     #define BOARD_NAME "ESP8266" // Define a board name
+    #include <ESP8266WiFi.h>
+    #include <ESP8266WebServer.h>
+    #include <ESP8266HTTPClient.h>
+    #include <ESP8266httpUpdate.h>
 #endif
 
 
