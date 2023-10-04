@@ -14,14 +14,23 @@
 
 #define JSON_NAME "firmwareUpdate.json"
 
+// Check if the code is being compiled for ESP32
+#ifdef ESP32
+    #define BOARD_NAME "ESP32" // Define a board name
+#endif
+
+// Check if the code is being compiled for ESP8266
+#ifdef ESP8266
+    #define BOARD_NAME "ESP8266" // Define a board name
+#endif
+
+
 // =================================> Variables and objects declarations <================================
+#define HOSTNAME "AutomathausNode"
+#define AP_PASSWORD "0123456789"
+
 Preferences preferences;
 WebServer server(80);
-
-
-bool resetMode = false;
-const char* ssid_ap = "AutomathausNodeTest";
-const char* password_ap = "0123456789";
 
 const String firmwareFolderUrl = "https://raw.githubusercontent.com/Lorenx03/AutomathausFirmware/main/Esp32/";
 String firmwareFilename = "firmware.bin";
@@ -40,7 +49,7 @@ void setup() {
     preferences.begin("credentials", false);
 
     // Wifi stuff
-    WiFi.setHostname("AutomathausNode");
+    WiFi.setHostname(HOSTNAME);
     WiFi.mode(WIFI_STA);
     WiFi.disconnect();
     delay(100);
@@ -54,8 +63,11 @@ void setup() {
     Serial.println(password);
 
     // Tries to connect to network
-    startSTAmode(networkSSID.c_str(), password.c_str());
-
+    if (tryConnect(networkSSID.c_str(), password.c_str())) {
+        Serial.println("Connection failed.");
+        startResetMode();
+    }
+    
     server.enableCORS();  // CORS
 
     Serial.println("FIRMWARE VER: " + String(firmwareVersion));
@@ -65,10 +77,17 @@ void setup() {
 
     // root
     server.on("/", []() {
-        if (!resetMode) {
-            server.send(200, "text/html", index_html);
-        } else {
-            server.send(200, "text/html", reset_html);
+        switch (WiFi.getMode()) {
+            case WIFI_STA:
+                server.send(200, "text/html", index_html);
+            break;
+
+            case WIFI_AP:
+                server.send(200, "text/html", reset_html);
+            break;
+            
+            default:
+                server.send(200, "text/html", "Error");
         }
     });
 
@@ -90,15 +109,18 @@ void setup() {
     Serial.println("HTTP server started");
 }
 
+
+
+
 // Timer variables
 unsigned long previousMillis = 0;
-const long interval = 10000;
+const long interval = 60000;
 
 // Main loop
 void loop() {
     server.handleClient();
 
-    if (!resetMode) {
+    if (WiFi.getMode() == WIFI_STA) {
         unsigned long currentMillis = millis();
         if (currentMillis - previousMillis >= interval) {
             previousMillis = currentMillis;
@@ -109,6 +131,16 @@ void loop() {
     
     delay(2);
 }
+
+
+
+
+
+
+
+
+
+
 
 // Utility function, reboots the Esp32 and outputs the reason to the serial port.
 static void rebootEspWithReason(String reason) {
@@ -121,7 +153,7 @@ static void rebootEspWithReason(String reason) {
 // =================================> WiFi connection and credential reset <================================
 
 // Starts the device in Station mode.
-void startSTAmode(const char SSID[], const char password[]) {
+bool tryConnect(const char SSID[], const char password[]) {
     int timeout = 0;
     WiFi.mode(WIFI_STA);
     WiFi.begin(SSID, password);
@@ -139,27 +171,31 @@ void startSTAmode(const char SSID[], const char password[]) {
         Serial.println(SSID);
         Serial.print("IP address: ");
         Serial.println(WiFi.localIP());
-        resetMode = false;
+        preferences.end();
 
         if (MDNS.begin("esp32")) {
             Serial.println("MDNS responder started");
         }
 
-        preferences.end();
+        return false;
     } else {
-        Serial.println("Connection failed.");
         WiFi.disconnect();
-        startAPmode();
+        return true;
     }
 }
 
 // Starts the device in Access point mode for password reset.
-void startAPmode() {
-    Serial.println("Starting configuration Access point");
-    resetMode = true;
+void startResetMode() {
+    randomSeed(millis());
+    String randomStr = "";
+    for (int i = 0; i < 5; i++) {
+        int randomNumber = random(0, 10); // Generate a random number between 0 and 9
+        randomStr += String(randomNumber);
+    }
 
+    Serial.println("Starting configuration Access point");
     WiFi.mode(WIFI_AP);
-    WiFi.softAP(ssid_ap, password_ap);
+    WiFi.softAP(HOSTNAME + randomStr, AP_PASSWORD);
     IPAddress IP = WiFi.softAPIP();
     Serial.print("AP IP address: ");
     Serial.println(IP);
@@ -267,7 +303,7 @@ bool checkForUpdates() {
     int httpCode = http.GET();
 
     String payload = http.getString();
-    Serial.println(payload);
+    //Serial.println(payload);
 
     StaticJsonDocument<100> json;
     deserializeJson(json, payload);
