@@ -291,14 +291,17 @@ bool checkForUpdates() {
     bool out = false;
     int jsonFirmwareVer = 0;
     
-    WiFiClient client;
+    WiFiClientSecure client;
+    client.setInsecure();
     HTTPClient http;
+
+
     http.begin(client, firmwareFolderUrl + JSON_NAME);
-    Serial.println(firmwareFolderUrl + JSON_NAME);
+    //Serial.println(firmwareFolderUrl + JSON_NAME);
     int httpCode = http.GET();
 
     String payload = http.getString();
-    Serial.println(payload);
+    //Serial.println(payload);
 
     StaticJsonDocument<100> json;
     deserializeJson(json, payload);
