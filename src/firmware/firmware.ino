@@ -132,7 +132,7 @@ void loop() {
         if (currentMillis - previousMillis >= interval) {
             previousMillis = currentMillis;
             
-            //OTA_UpdateRoutine();
+            OTA_UpdateRoutine();
         }
     }
     
@@ -283,9 +283,7 @@ void handleNotFound() { server.send(404, "text/plain", "Not found 404"); }
 // =================================> OTA Updates <================================
 void OTA_UpdateRoutine(){
     Serial.println("----> Checking for updates <----");
-        if (checkForUpdates()) {
-            
-        }
+    Serial.println(checkForUpdates());
 }
 
 
@@ -293,12 +291,14 @@ bool checkForUpdates() {
     bool out = false;
     int jsonFirmwareVer = 0;
     
+    WiFiClient client;
     HTTPClient http;
-    http.begin(firmwareFolderUrl + JSON_NAME);
+    http.begin(client, firmwareFolderUrl + JSON_NAME);
+    Serial.println(firmwareFolderUrl + JSON_NAME);
     int httpCode = http.GET();
 
     String payload = http.getString();
-    //Serial.println(payload);
+    Serial.println(payload);
 
     StaticJsonDocument<100> json;
     deserializeJson(json, payload);
