@@ -1,8 +1,5 @@
-#include <WiFiClient.h>
-#include <WiFi.h>
 #include <ArduinoJson.h>
-#include <ESPmDNS.h>
-#include "FS.h"
+#include <WiFiClient.h>
 
 #include "index.h"
 #include "reset.h"
@@ -12,11 +9,13 @@
 // Check if the code is being compiled for ESP32
 #ifdef ESP32
     #define BOARD_NAME "ESP32" // Define a board name
+    #include <WiFi.h>
     #include <HTTPClient.h>
     #include <WebServer.h>
+    #include <ESPmDNS.h>
     #include <Preferences.h>
-    #include <Update.h>
-    #include "SPIFFS.h"
+
+    WebServer server(80);
 #endif
 
 // Check if the code is being compiled for ESP8266
@@ -26,6 +25,10 @@
     #include <ESP8266WebServer.h>
     #include <ESP8266HTTPClient.h>
     #include <ESP8266httpUpdate.h>
+    #include <ESP8266mDNS.h>
+    #include <Preferences.h>
+
+    ESP8266WebServer server(80);
 #endif
 
 
@@ -34,20 +37,19 @@
 #define AP_PASSWORD "0123456789"
 
 Preferences preferences;
-WebServer server(80);
 
-const String firmwareFolderUrl = "https://raw.githubusercontent.com/Lorenx03/AutomathausFirmware/main/Esp32/";
+const String firmwareFolderUrl = "https://raw.githubusercontent.com/Lorenx03/AutomathausFirmware/main/" + String(BOARD_NAME) + "/";
 String firmwareFilename = "firmware.bin";
 const int firmwareVersion = 0;
 
 
 // =================================> Setup() <================================
 void setup() {
-    if (SPIFFS.begin()){
-        Serial.println("Reading the filesystem...");
-    }else{
-        Serial.println("Problems reading the filesystem");
-    }
+    // if (SPIFFS.begin()){
+    //     Serial.println("Reading the filesystem...");
+    // }else{
+    //     Serial.println("Problems reading the filesystem");
+    // }
 
     Serial.begin(115200);
     preferences.begin("credentials", false);
@@ -63,6 +65,7 @@ void setup() {
     String password = preferences.getString("password", "");
 
     // debug
+    Serial.println("");
     Serial.println(networkSSID);
     Serial.println(password);
 
@@ -72,8 +75,7 @@ void setup() {
         startResetMode();
     }
     
-    server.enableCORS();  // CORS
-
+    //server.enableCORS();  // CORS
     Serial.println("FIRMWARE VER: " + String(firmwareVersion));
 
 
@@ -129,7 +131,7 @@ void loop() {
         if (currentMillis - previousMillis >= interval) {
             previousMillis = currentMillis;
             
-            OTA_UpdateRoutine();
+            //OTA_UpdateRoutine();
         }
     }
     
@@ -164,7 +166,7 @@ bool tryConnect(const char SSID[], const char password[]) {
     Serial.println("");
 
     // Wait for connection
-    while (WiFi.status() != WL_CONNECTED && timeout < 10) {
+    while (WiFi.status() != WL_CONNECTED && timeout < 30) {
         delay(500);
         Serial.print(".");
         timeout++;
@@ -177,7 +179,7 @@ bool tryConnect(const char SSID[], const char password[]) {
         Serial.println(WiFi.localIP());
         preferences.end();
 
-        if (MDNS.begin("esp32")) {
+        if (MDNS.begin(HOSTNAME)) {
             Serial.println("MDNS responder started");
         }
 
@@ -278,22 +280,10 @@ void handleNotFound() { server.send(404, "text/plain", "Not found 404"); }
 
 
 // =================================> OTA Updates <================================
-
 void OTA_UpdateRoutine(){
-	checkForUpdates();
-
     Serial.println("----> Checking for updates <----");
         if (checkForUpdates()) {
-            if (SPIFFS.exists("/update.bin")) {
-                SPIFFS.remove("/update.bin");
-                Serial.println("Removed existing update file");
-            }
-            if (downloadFirmware(firmwareFolderUrl + firmwareFilename)) {
-                Serial.println("Download complete");
-                updateFromFS(SPIFFS);
-            } else {
-                Serial.println("Download failed");
-            }
+            
         }
 }
 
@@ -333,91 +323,4 @@ bool checkForUpdates() {
     }
 
     return out;
-}
-
-
-bool downloadFirmware(String firmwareUrl) {
-    HTTPClient http;
-    bool success = false;
-
-    File f = SPIFFS.open("/update.bin", FILE_WRITE);
-    if (f) {
-        http.begin(firmwareUrl);
-        int httpCode = http.GET();
-        if (httpCode > 0) {
-            if (httpCode == HTTP_CODE_OK) {
-                Serial.println("Downloading...");
-                http.writeToStream(&f);
-                success = true;
-            }
-        } else {
-            Serial.printf("[HTTP] GET... failed, error: %s\n", http.errorToString(httpCode).c_str());
-        }
-        f.close();
-    } else {
-        Serial.println("failed to open /update.bin");
-    }
-    http.end();
-
-    return success;
-}
-
-
-void performUpdate(Stream &updateSource, size_t updateSize) {
-    if (Update.begin(updateSize)) {
-        size_t written = Update.writeStream(updateSource);
-        if (written == updateSize) {
-            Serial.println("Written : " + String(written) + " successfully");
-        } else {
-            Serial.println("Written only : " + String(written) + "/" + String(updateSize) + ". Retry?");
-        }
-
-        if (Update.end()) {
-            Serial.println("OTA done!");
-
-            if (Update.isFinished()) {
-                Serial.println("Update successfully completed. Rebooting...");
-            } else {
-                Serial.println("Update not finished? Something went wrong!");
-            }
-
-        } else {
-            Serial.println("Error Occurred. Error #: " + String(Update.getError()));
-        }
-
-    } else {
-        Serial.println("Not enough space to begin OTA");
-    }
-}
-
-
-
-void updateFromFS(fs::FS &fs) {
-    File updateBin = fs.open("/update.bin");
-    if (updateBin) {
-        if (updateBin.isDirectory()) {
-            Serial.println("Error, update.bin is not a file");
-            updateBin.close();
-            return;
-        }
-
-        size_t updateSize = updateBin.size();
-
-        if (updateSize > 0) {
-            Serial.println("Trying to start update");
-            performUpdate(updateBin, updateSize);
-        } else {
-            Serial.println("Error, file is empty");
-        }
-
-        updateBin.close();
-
-        // when finished remove the binary from spiffs to indicate end of the process
-        Serial.println("Removing update file");
-        fs.remove("/update.bin");
-
-        rebootEspWithReason("Rebooting to complete OTA update");
-    } else {
-        Serial.println("Could not load update.bin from spiffs root");
-    }
 }
