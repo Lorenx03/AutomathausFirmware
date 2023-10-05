@@ -120,7 +120,8 @@ void setup() {
 
 // Timer variables
 unsigned long previousMillis = 0;
-const long interval = 60000;
+//const long interval = 60000;
+const long interval = 10000;
 
 // Main loop
 void loop() {
