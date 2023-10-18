@@ -3,6 +3,7 @@
 
 # Ignore .vscode directory
 **/.vscode/
+**/*.ar
 
 .DS_STORE
 .vscode
