@@ -1,8 +1,10 @@
 #include <ArduinoJson.h>
-#include <WiFiClient.h>
+#include <WiFiClientSecure.h>
+#include <time.h>
 
 #include "index.h"
 #include "reset.h"
+#include "cert.h"
 
 #define JSON_NAME "firmwareUpdate.json"
 
@@ -14,6 +16,7 @@
     #include <WebServer.h>
     #include <ESPmDNS.h>
     #include <Preferences.h>
+    #include <HTTPUpdate.h>
 
     WebServer server(80);
 #endif
@@ -27,8 +30,10 @@
     #include <ESP8266httpUpdate.h>
     #include <ESP8266mDNS.h>
     #include <Preferences.h>
+    #include <ESP8266httpUpdate.h>
 
     ESP8266WebServer server(80);
+    X509List cert(cert_DigiCert_Global_Root_CA);
 #endif
 
 
@@ -132,7 +137,7 @@ void loop() {
         if (currentMillis - previousMillis >= interval) {
             previousMillis = currentMillis;
             
-            OTA_UpdateRoutine();
+            checkForUpdates();
         }
     }
     
@@ -154,6 +159,26 @@ static void rebootEspWithReason(String reason) {
     Serial.println(reason);
     delay(1000);
     ESP.restart();
+}
+
+// Set time via NTP, as required for x.509 validation
+void setClock() {
+  configTime(0, 0, "pool.ntp.org", "time.nist.gov");  // UTC
+
+  Serial.print(F("Waiting for NTP time sync: "));
+  time_t now = time(nullptr);
+  while (now < 8 * 3600 * 2) {
+    yield();
+    delay(500);
+    Serial.print(F("."));
+    now = time(nullptr);
+  }
+
+  Serial.println(F(""));
+  struct tm timeinfo;
+  gmtime_r(&now, &timeinfo);
+  Serial.print(F("Current time: "));
+  Serial.print(asctime(&timeinfo));
 }
 
 
@@ -281,21 +306,27 @@ void handleNotFound() { server.send(404, "text/plain", "Not found 404"); }
 
 
 // =================================> OTA Updates <================================
-void OTA_UpdateRoutine(){
-    Serial.println("----> Checking for updates <----");
-    Serial.println(checkForUpdates());
-}
 
 
-bool checkForUpdates() {
-    bool out = false;
+
+void checkForUpdates() {
     int jsonFirmwareVer = 0;
-    
+    setClock();
+
     WiFiClientSecure client;
-    client.setInsecure();
+    Serial.printf("Using certificate: %s\n", cert_DigiCert_Global_Root_CA);
+    // Check if the code is being compiled for ESP32
+    #ifdef ESP32
+        client.setCACert(cert_DigiCert_Global_Root_CA);
+    #endif
+
+    // Check if the code is being compiled for ESP8266
+    #ifdef ESP8266
+        client.setTrustAnchors(&cert);
+    #endif
+
+    
     HTTPClient http;
-
-
     http.begin(client, firmwareFolderUrl + JSON_NAME);
     //Serial.println(firmwareFolderUrl + JSON_NAME);
     int httpCode = http.GET();
@@ -310,7 +341,7 @@ bool checkForUpdates() {
         jsonFirmwareVer = json["versionCode"].as<int>();
         firmwareFilename = json["fileName"].as<String>();
 
-        Serial.print("Version: ");
+        Serial.print("Payload: ");
         Serial.print(firmwareFilename);
         Serial.print("\tCode: ");
         Serial.println(jsonFirmwareVer);
@@ -319,12 +350,43 @@ bool checkForUpdates() {
         
         if (jsonFirmwareVer > firmwareVersion) {
             Serial.println("Firmware update available");
-            out = true;
+            Serial.println("Performing update...");
+
+            // Check if the code is being compiled for ESP32
+            #ifdef ESP32
+                httpUpdate.setLedPin(LED_BUILTIN, LOW);
+                t_httpUpdate_return ret = httpUpdate.update(client, firmwareFolderUrl + firmwareFilename);
+
+                switch (ret) {
+                    case HTTP_UPDATE_FAILED:
+                        Serial.printf("HTTP_UPDATE_FAILED Error (%d): %s\n", httpUpdate.getLastError(), httpUpdate.getLastErrorString().c_str());
+                        break;
+
+                    case HTTP_UPDATE_NO_UPDATES:
+                        Serial.println("HTTP_UPDATE_NO_UPDATES");
+                        break;
+
+                    case HTTP_UPDATE_OK:
+                        Serial.println("HTTP_UPDATE_OK");
+                        break;
+                  }
+            #endif
+
+            // Check if the code is being compiled for ESP8266
+            #ifdef ESP8266
+                ESPhttpUpdate.setLedPin(LED_BUILTIN, LOW);
+                t_httpUpdate_return ret = ESPhttpUpdate.update(client, firmwareFolderUrl + firmwareFilename);
+
+                switch (ret) {
+                    case HTTP_UPDATE_FAILED: Serial.printf("HTTP_UPDATE_FAILED Error (%d): %s\n", ESPhttpUpdate.getLastError(), ESPhttpUpdate.getLastErrorString().c_str()); break;
+
+                    case HTTP_UPDATE_NO_UPDATES: Serial.println("HTTP_UPDATE_NO_UPDATES"); break;
+
+                    case HTTP_UPDATE_OK: Serial.println("HTTP_UPDATE_OK"); break;
+                }
+            #endif
         } else {
             Serial.println("You have the latest version");
-            out = false;
         }
     }
-
-    return out;
 }
